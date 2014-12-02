@@ -1,27 +1,43 @@
 #include <ros/ros.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <ras_arduino_msgs/Odometry.h>
+#include <robot_msgs/detectedObject.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <nav_msgs/Path.h>
 
 enum {WALL = 300000, NOTHING = 0, ROBOT = 300001, GOAL = 1};
-//int width = 6, height = 6;
-/*int map[6][6]=	{{0,0,0,0,0,0},
+/*int width = 6, height = 6;
+int map[6][6]=	{{0,0,0,0,0,0},
                  {0,0,0,0,0,0},
                  {0,0,0,0,0,0},
                  {300000,300000,300000,300000,0,0},
                  {0,0,0,0,0,0},
-                 {0,0,0,0,0,0}};*/
-
-//int goal_x=0, goal_y=3, robot_x=5, robot_y=3, map_x, map_y, count;
-int goal_x, goal_y, robot_x, robot_y, map_x, map_y, count;
-int width = 500, height = 500;
-int minimum_node = 300000, reset_node = 300000, minimum_location = 300000;
-int new_state = 1, old_state = 1;
-int tmp_x, tmp_y;
-int map[500][500];
+                 {0,0,0,0,0,0}};
+int goal_x=0, goal_y=3, robot_x=5, robot_y=3, map_x, map_y, count;*/
 //int map2[36]=	{0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,300000,300000,300000,300000,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 //int map[6][6];
+int goal_x, goal_y, robot_x, robot_y, map_x, map_y, count;
+int width = 500, height = 500;
+int map[500][500];
+int minimum_node = 300000, reset_node = 300000, minimum_location = 300000;
+int new_state = 1, old_state = 1;
+int tmp_x, tmp_y, steps, i;
+int robo_path_ori_x[250000], robo_path_ori_y[250000];
 
 nav_msgs::OccupancyGrid map2;
 
+void RoboCallback(const ras_arduino_msgs::Odometry &msg)
+{
+    robot_x = msg.x;
+    robot_y = msg.y;
+}
+
+//robot_msgs::detectedObject
+/*void GoalCallback(const robot_msgs::detectedObject &msg)
+{
+    goal_x = msg.x;
+    goal_y = msg.y;
+}*/
 void MapCallback(const nav_msgs::OccupancyGrid &msg)
 {
     map2.data = msg.data;
@@ -130,8 +146,8 @@ int propagate_wavefront(int robot_x, int robot_y)
                 map_y = 0;
             }
         }
-        printf("Sweep #: %d\n",count+1);
-        print_map();
+    //    printf("Sweep #: %d\n",count+1);
+    //    print_map();
         count++;
     }
     return 0;
@@ -142,30 +158,56 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "path_planning");
     ros::NodeHandle n;
-    ros::Subscriber map_sub = n.subscribe("/gridmap", 1, MapCallback);
+    ros::Subscriber robo_sub = n.subscribe("/arduino/odometry_estimate", 1, RoboCallback);
+  //  ros::Subscriber goal_sub = n.subscribe("/destination", 1, GoalCallback);
+    ros::Subscriber map_sub = n.subscribe("/costmap", 1, MapCallback);
+    ros::Publisher path_pub = n.advertise<nav_msgs::Path>("/path", 1);
  /*   for(tmp_x=0;tmp_x<6;tmp_x++)
           for(tmp_y=0;tmp_y<6;tmp_y++)
               map[tmp_x][tmp_y]=map2[tmp_x*6+tmp_y];*/
 
     print_map();
+    steps = 0;
+    robo_path_ori_x[0] = robot_x;
+    robo_path_ori_y[0] = robot_y;
     while(map[robot_x][robot_y]!=GOAL)
     {
         new_state=propagate_wavefront(robot_x,robot_y);
         switch(new_state)
         {
         case 1:
-            robot_x++;
+            robot_x++; //down
             break;
         case 2:
-            robot_x--;
+            robot_x--; //up
             break;
         case 3:
-            robot_y++;
+            robot_y++; //right
             break;
         case 4:
-            robot_y--;
+            robot_y--; //left
         }
         old_state = new_state;
+        steps++;
+        robo_path_ori_x[steps] = robot_x;
+        robo_path_ori_y[steps] = robot_y;
     }
+    nav_msgs::Path path;
+    path.poses.resize(steps);
+
+    int robo_path_x[steps], robo_path_y[steps];
+    for(i=0;i<=steps;i++)
+    {
+        robo_path_x[i] = robo_path_ori_x[i];
+        robo_path_y[i] = robo_path_ori_y[i];
+        geometry_msgs::Pose point;
+       // path.poses.pose.position.x = robo_path_ori_x[i];
+       // path.poses.pose.position.y = robo_path_ori_y[i];
+        path.poses[i].pose.position.x = robo_path_ori_x[i];
+        path.poses[i].pose.position.y = robo_path_ori_y[i];
+        printf("x: %d, y: %d\n", robo_path_x[i], robo_path_y[i]);
+    }
+    path_pub.publish(path);
+
     return 0;
 }

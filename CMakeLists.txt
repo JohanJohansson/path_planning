@@ -5,13 +5,11 @@ project(path_planning)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  ras_arduino_msgs
+  robot_msgs
 )
 
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES path_planning
-#  CATKIN_DEPENDS roscpp std_msgs
-#  DEPENDS system_lib
 )
 
 include_directories(
