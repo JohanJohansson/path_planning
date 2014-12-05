@@ -157,7 +157,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "path_planning");
     ros::NodeHandle n;
-    ros::Rate loop_rate(20);
+    ros::Rate loop_rate(1);
     // ros::Subscriber robo_sub = n.subscribe("/arduino/odometry_estimate", 1, RoboCallback);
     // ros::Subscriber goal_sub = n.subscribe("/destination", 1, GoalCallback);
     ros::Subscriber map_sub = n.subscribe("/costmap", 1, MapCallback);
@@ -229,18 +229,14 @@ int main(int argc, char **argv)
             printf("x: %d, y: %d\n", robo_path_x[i], robo_path_y[i]);
             geometry_msgs::Point p;
             line.id = i;
-            p.x = robo_path_x[i]/50.0;
-            p.y = robo_path_y[i]/50.0;
+            p.x = robo_path_x[i]/100.0+4.0;
+            p.y = robo_path_y[i]/100.0+3.0;
 
             line.points.push_back(p);
+            marker_pub.publish(line);
         }
-        geometry_msgs::Point p;
-        line.id = i;
-        p.x = robo_path_x[0]/50.0;
-        p.y = robo_path_y[0]/50.0;
 
-        line.points.push_back(p);
-        marker_pub.publish(line);
+       // marker_pub.publish(line);
        // path_pub.publish(path);
         ros::spinOnce();
         loop_rate.sleep();
