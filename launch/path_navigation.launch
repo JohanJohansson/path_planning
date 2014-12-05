@@ -1,0 +1,12 @@
+<launch>
+    <!-- Run path navigation -->
+    <node pkg="path_planning" type="path_navigation" name="path_navigation" output="screen" />
+
+    <!-- Run Turn Controller -->
+    <node pkg="wall_follower" type="turn_controller" name="turn_controller" output="screen" >
+    </node>
+
+    <include file="$(find mapping)/launch/mapping_launch.launch" />
+
+</launch>
+

@@ -27,24 +27,26 @@ public:
     Navigation() {
         n = ros::NodeHandle();
         path_sub = n.subscribe("/path", 1, &Navigation::pathCallback, this);
-        pose_sub = n.subscribe("/arduino/odometry_estimate", 1, &Navigation::odometryCallback, this);
+        pose_sub = n.subscribe("/arduino/odometry", 1, &Navigation::odometryCallback, this);
         twist_pub = n.advertise<geometry_msgs::Twist>("/motor_controller/twist", 1);
         turn_client = n.serviceClient<robot_msgs::MakeTurn>("/make_turn");
-        look_ahead = 8;
+        look_ahead = 0.2;
         goal_reached = false;
 
         path.poses.resize(100);
         geometry_msgs::PoseStamped point;
 
         for (int i = 0; i < 50; i++) {
-            point.pose.position.x = i;
-            point.pose.position.y = 0;
+            point.pose.position.x = 0/100.0;
+            point.pose.position.y = i/100.0;
             path.poses[i] = point;
+            ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
         }
         for (int i = 0; i < 50; i++) {
-            point.pose.position.x = 49;
-            point.pose.position.y = i;
+            point.pose.position.x = i/100.0;
+            point.pose.position.y = 49/100.0;
             path.poses[i+50] = point;
+            ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
         }
 
       /*pose.x = 8;
@@ -60,19 +62,21 @@ public:
 
     void odometryCallback(const ras_arduino_msgs::Odometry &msg) {
         pose = msg;
+        ROS_INFO("Pose x: %f y: %f theta: %f", pose.x, pose.y, pose.theta);
     }
 
     void followPath() {
         int index = findCarrot();
-        int index_closest = findClosest();
-        ROS_INFO("Index %d Closest %d", index, index_closest);
+        //int index_closest = findClosest();
+        ROS_INFO("Look ahead coordinates x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
 
-        double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x) - pose.theta;
-        ROS_INFO("ANGLE: %f", angle);
+        double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
+        double used_angle = pose.theta + M_PI_2 - angle;
+        ROS_INFO("ANGLE: %f USED_ANGLE: %f", angle, used_angle);
 
-        double alpha = -1;
+        double alpha = 1;
         //TODO 1 try out with the circular movement, maybe add pi/2 to the pose angle
-        double delta_x = (path.poses[index].pose.position.x-pose.x)*cos(-angle) + (path.poses[index].pose.position.y-pose.y)*sin(pose.theta+M_PI_2-angle);
+        double delta_x = (path.poses[index].pose.position.x-pose.x)*cos(used_angle) + (path.poses[index].pose.position.y-pose.y)*sin(used_angle);
         double gamma = -2*delta_x/pow(look_ahead,2);
 
         ROS_INFO("Delta x: %f", delta_x);
@@ -170,10 +174,11 @@ int main(int argc, char **argv) {
     Navigation nav;
 
     ros::Rate loop_rate(RATE);
-    //while (!nav.reachedGoal()) {
+    while (!nav.reachedGoal()) {
+        ros::spinOnce();
         nav.followPath();
         loop_rate.sleep();
-    //}
+    }
 
     return 0;
 }
