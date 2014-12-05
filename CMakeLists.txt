@@ -20,6 +20,10 @@ add_executable(path_planning src/path_planning.cpp)
 add_dependencies(path_planning ${catkin_EXPORTED_TARGETS})
 target_link_libraries(path_planning ${catkin_LIBRARIES})
 
+add_executable(path_planning_new src/path_planning_new.cpp)
+add_dependencies(path_planning_new ${catkin_EXPORTED_TARGETS})
+target_link_libraries(path_planning_new ${catkin_LIBRARIES})
+
 add_executable(path_navigation src/path_navigation.cpp)
 add_dependencies(path_navigation ${catkin_EXPORTED_TARGETS})
 target_link_libraries(path_navigation ${catkin_LIBRARIES})
