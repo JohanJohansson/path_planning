@@ -431,11 +431,16 @@ public:
         double rotate = pose.theta - angle;
 
         if (abs(rotate)>=M_PI_4) {
-            makeTurn(rotate);
+            if (rotate < 0)
+                mc.setClientCall(LEFT_TURN);
+            else mc.setClientCall(RIGHT_TURN);
+            //makeTurn(rotate);
         } else if (abs(rotate) < 0.0001 ) {
             twist.linear.x = 0.1;
             twist.angular.z = 0;
-            mc.forward(abs(path.poses[index].pose.position.y-pose.y));
+            double distance = calculate_distance(index);
+            //mc.forward(abs(path.poses[index].pose.position.y-pose.y));
+            mc.forward(distance);
             twist_pub.publish(twist);
         }
         /*
@@ -506,6 +511,17 @@ public:
         if(index > 0) return index;
         else return -1;
 
+    }
+
+    double calculate_distance(int index_carrot) {
+        //int index_closest = findClosest();
+
+        double distance_x = abs(path.poses[index_carrot].pose.position.x - pose.x);//path.poses[index_closest].pose.position.x;
+        double distance_y = abs(path.poses[index_carrot].pose.position.y - pose.y);//path.poses[index_closest].pose.position.y;
+
+        if (distance_x > distance_y)
+            return distance_y;
+        else return distance_x;
     }
 
     void makeTurn(int angle) {
