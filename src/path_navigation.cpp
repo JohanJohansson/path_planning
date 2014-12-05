@@ -429,8 +429,9 @@ public:
         double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
 
         double rotate = pose.theta - angle;
+        ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
-        if (abs(rotate)>=M_PI_4) {
+        if (abs(rotate)>=M_PI_2) {
             if (rotate < 0)
                 mc.setClientCall(LEFT_TURN);
             else mc.setClientCall(RIGHT_TURN);
@@ -443,34 +444,6 @@ public:
             mc.forward(distance);
             twist_pub.publish(twist);
         }
-        /*
-        //int index_closest = findClosest();
-        ROS_INFO("Look ahead coordinates x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
-
-        //double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
-        double used_angle = pose.theta - angle;
-        ROS_INFO("ANGLE: %f USED_ANGLE: %f", angle, used_angle);
-
-        double alpha = 1;
-        //TODO 1 try out with the circular movement, maybe add pi/2 to the pose angle
-        double delta_x = (path.poses[index].pose.position.x-pose.x)*cos(used_angle) + (path.poses[index].pose.position.y-pose.y)*sin(used_angle);
-        double gamma = -2*delta_x/pow(look_ahead,2);
-
-        ROS_INFO("Delta x: %f", delta_x);
-        ROS_INFO("Radius r: %f Gamma g: %f", 1/gamma, gamma);
-        //TODO try with pid controller
-        //while {
-        geometry_msgs::Twist twist;
-        if (abs(used_angle)>=M_PI_2) {
-            makeTurn(used_angle);
-        } else {
-            twist.linear.x = 0.1;
-            twist.angular.z = alpha*gamma;
-            //Try twist.angular.z = 2*M_PI/gamma*RATE;
-            ROS_INFO("Angular velocity: %f %f", alpha*gamma, -0.000005*2*M_PI/gamma*RATE);
-            twist_pub.publish(twist);
-        }*/
-        //}
     }
 
     int findClosest() {
@@ -515,7 +488,7 @@ public:
 
     double calculate_distance(int index_carrot) {
         //int index_closest = findClosest();
-
+        ROS_INFO("Path coordinates x:%f y:%f", path.poses[index_carrot].pose.position.x, path.poses[index_carrot].pose.position.y);
         double distance_x = abs(path.poses[index_carrot].pose.position.x - pose.x);//path.poses[index_closest].pose.position.x;
         double distance_y = abs(path.poses[index_carrot].pose.position.y - pose.y);//path.poses[index_closest].pose.position.y;
 
