@@ -8,17 +8,17 @@
 #include <visualization_msgs/Marker.h>
 
 enum {WALL = 300000, NOTHING = 0, ROBOT = 300001, GOAL = 1};
-/*int width = 6, height = 6;
-int map[6][6]= {{0,0,0,0,0,0},
-{0,0,0,0,0,0},
-{0,0,0,0,0,0},
-{300000,300000,300000,300000,0,0},
-{0,0,0,0,0,0},
-{0,0,0,0,0,0}};
-int goal_x=0, goal_y=3, robot_x=5, robot_y=3, map_x, map_y, count;*/
+//int width = 6, height = 6;
+//int map[6][6]= {{0,0,0,0,0,0},
+//                {0,0,0,0,0,0},
+//                {0,0,0,0,0,0},
+//                {300000,300000,300000,300000,0,0},
+//                {0,0,0,0,0,0},
+//                {0,0,0,0,0,0}};
+//int goal_x=0, goal_y=3, robot_x=5, robot_y=3, map_x, map_y, count;
 //int map2[36]= {0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,300000,300000,300000,300000,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 //int map[6][6];
-int goal_x=150, goal_y=370, robot_x=250, robot_y=250, map_x, map_y, count;
+int goal_x=150, goal_y=150, robot_x=250, robot_y=250, map_x, map_y, count;
 int width = 500, height = 500;
 int map[500][500];
 int minimum_node = 300000, reset_node = 300000, minimum_location = 300000;
@@ -39,8 +39,6 @@ goal_x = msg.x;
 goal_y = msg.y;
 }*/
 
-bool flag = 0;
-
 void MapCallback(const nav_msgs::OccupancyGrid &msg)
 {
     map2.data = msg.data;
@@ -49,12 +47,12 @@ void MapCallback(const nav_msgs::OccupancyGrid &msg)
         {
             map[tmp_x][tmp_y]=map2.data[tmp_x*width+tmp_y];
             if(map[tmp_x][tmp_y]==150 || map[tmp_x][tmp_y]==-1)
-                map[tmp_x][tmp_y]=300000;
+                map[tmp_x][tmp_y]=WALL;
         }
-    ROS_INFO("HAHA");
+    ROS_INFO("Map called");
 }
 
-void print_map()
+/*void print_map()
 {
     for(tmp_x=0;tmp_x<height;tmp_x++)
     {
@@ -72,7 +70,7 @@ void print_map()
         printf("\n");
     }
     printf("\n");
-}
+}*/
 
 int min_neighbour(int map_x, int map_y)
 {
@@ -110,15 +108,15 @@ int min_neighbour(int map_x, int map_y)
 
 void unpropagate_wavefront(int robot_x, int robot_y)
 {
- //   printf("before unpropogate:\n");
- //   print_map();
+//    printf("before unpropogate:\n");
+//    print_map();
     for(map_x=0; map_x<height; map_x++)
         for(map_y=0; map_y<width; map_y++)
             if(map[map_x][map_y]!=WALL && map[map_x][map_y]!=GOAL)
                 map[map_x][map_y] = NOTHING;
     map[robot_x][robot_y] = ROBOT;
  //   printf("Unpropogate:\n");
- //   print_map();
+//    print_map();
 }
 
 int propagate_wavefront(int robot_x, int robot_y)
@@ -184,8 +182,8 @@ int main(int argc, char **argv)
     line.pose.position.z = 0;
 
     line.scale.x = 0.1;
-    //line.scale.y = 0.1;
-    //line.scale.z = 0.1;
+    line.scale.y = 0.1;
+    line.scale.z = 0.1;
     line.color.a = 1.0;
     line.color.r = 0.0;
     line.color.g = 1.0;
@@ -230,8 +228,8 @@ int main(int argc, char **argv)
             // geometry_msgs::Pose point;
             // path.poses.pose.position.x = robo_path_ori_x[i];
             // path.poses.pose.position.y = robo_path_ori_y[i];
-       //     path.poses[i].pose.position.x = robo_path_ori_x[i];
-       //     path.poses[i].pose.position.y = robo_path_ori_y[i];
+            // path.poses[i].pose.position.x = robo_path_ori_x[i];
+            // path.poses[i].pose.position.y = robo_path_ori_y[i];
             printf("x: %d, y: %d\n", robo_path_x[i], robo_path_y[i]);
             geometry_msgs::Point p;
             line.id = i;
@@ -241,11 +239,9 @@ int main(int argc, char **argv)
             line.points.push_back(p);
         }
         mark_pub.publish(line);
-
-
        // path_pub.publish(path);
         ros::spinOnce();
         loop_rate.sleep();
-  //  return 0;
+    return 0;
 }
 }
