@@ -12,6 +12,8 @@
 
 enum {LEFT_TURN = 1, RIGHT_TURN = 2};
 
+#define RATE 20.0
+
 
 class Navigation {
 
@@ -45,9 +47,9 @@ public:
             path.poses[i+50] = point;
         }
 
-        /*pose.x = 8;
-        pose.y = 6;
-        pose.theta = 0;*/
+      /*pose.x = 8;
+        pose.y = -2;
+        pose.theta = 1.3;*/
     }
 
     ~Navigation() {}
@@ -83,6 +85,8 @@ public:
         } else {
             twist.linear.x = 0.1;
             twist.angular.z = alpha*gamma;
+            //Try twist.angular.z = 2*M_PI/gamma*RATE;
+            ROS_INFO("Angular velocity: %f %f", alpha*gamma, -0.000005*2*M_PI/gamma*RATE);
             twist_pub.publish(twist);
         }
         //}
@@ -165,11 +169,11 @@ int main(int argc, char **argv) {
 
     Navigation nav;
 
-    ros::Rate loop_rate(20.0);
-    while (!nav.reachedGoal()) {
+    ros::Rate loop_rate(RATE);
+    //while (!nav.reachedGoal()) {
         nav.followPath();
         loop_rate.sleep();
-    }
+    //}
 
     return 0;
 }
