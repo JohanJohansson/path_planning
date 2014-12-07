@@ -437,7 +437,7 @@ public:
 	ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
-        if (rotate >=M_PI_2*0.9 || rotate <= -M_PI_2*0.9) {
+        if (rotate >=M_PI_2*0.97 || rotate <= -M_PI_2*0.97) {
 	    ROS_INFO("Make large turn");
             //if (rotate > 0)
 		makeTurn(-rotate);
@@ -446,7 +446,7 @@ public:
             	//makeTurn(rotate);
         } else {//if (abs(rotate) < 0.0001 ) {
 	    
-	    double alpha = 1;
+	    double alpha = 2;
             twist.linear.x = 0.1;
             double temp = mc.wallTooClose();
             if (temp != 0) {
