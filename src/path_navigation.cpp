@@ -181,13 +181,19 @@ public:
         while (!back || !front) {
             ros::spinOnce();
             //if (front_left < 25 && back_left < 25) break; //Necessary?
-            if (front_left < 20) front = true; //TODO Try these new values for wall edge detection. Old value was 15
-            if (back_left < 20) back = true;
-            ROS_INFO("front: %d back: %d", front, back);
-            forward();
+            if (wallInFront()) {
+                if (front == true && back == false) {
+                    setClientCall(RIGHT_TURN);
+                }
+                break;
+            } else {
+                if (front_left < 20) front = true; //TODO Try these new values for wall edge detection. Old value was 15
+                if (back_left < 20) back = true;
+                ROS_INFO("front: %d back: %d", front, back);
+                forward();
+            }
             loop_rate.sleep();
         }
-
     }
 
     void checkBackSensorTurn(int prev_state) {
@@ -212,27 +218,26 @@ public:
 
         while (!back) {
             ros::spinOnce();
-        if (prev_state == RIGHT_TURN) {
-            back_sensor = back_left;
-            front_sensor = front_left;
-        } else {
-            back_sensor = back_right;
-            front_sensor = front_right;
-        }
-            //if (front_left < 25 && back_left < 25) break; //Necessary?
+            if (wallInFront()) return;
+            if (prev_state == RIGHT_TURN) {
+                back_sensor = back_left;
+                front_sensor = front_left;
+            } else {
+                back_sensor = back_right;
+                front_sensor = front_right;
+            }
             if (abs(back_sensor - previous_sensor_reading[1]) > 20) back = true; //TODO Try different values for wall edge detection. Old value was 15
             ROS_INFO("back: %d", back);
-        ROS_INFO("Value: %d", back_sensor);
+            ROS_INFO("Value: %d", back_sensor);
             forward();
             loop_rate.sleep();
         }
 
-        //ros::spinOnce();
         if (front_sensor > 25) {
             forward(15.0);
-        if(prev_state == LEFT_TURN) setClientCall(RIGHT_TURN);
-        else setClientCall(LEFT_TURN);
-        forward(20);
+            if(prev_state == LEFT_TURN) setClientCall(RIGHT_TURN);
+            else setClientCall(LEFT_TURN);
+            forward(20);
         }
     }
 
@@ -246,6 +251,17 @@ public:
             return true;
         }
         return false;
+    }
+
+    double wallTooClose() {
+        if ((front_left < 9 && front_left > 0 && back_left < 9 && back_left > 0) &&
+                front_right < 9 && front_right > 0 && back_right < 9 && back_right > 0)
+            return 0.0;
+        else if (front_left < 9 && front_left > 0 && back_left < 9 && back_left > 0) {
+            return -0.314;
+        } else if (front_right < 9 && front_right > 0 && back_right < 9 && back_right > 0) {
+            return 0.314;
+        }
     }
 
     //Checks the ir sensors which decides what state to use
@@ -390,14 +406,15 @@ public:
 
     void followPath() {
         int index = findCarrot();
-	int index_closest = findClosest();
+        int index_closest = findClosest();
 
-	if (index == -1) {
-		ROS_INFO("Out of track");
-		return;
-	}
-	double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
-	double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
+        if (index == -1) {
+            ROS_INFO("Out of track");
+            return;
+        }
+
+        double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
+        double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
         //double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
         double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
@@ -413,13 +430,14 @@ public:
                 //mc.setClientCall(RIGHT_TURN);
             //else //mc.setClientCall(LEFT_TURN);
             	//makeTurn(rotate);
-	} else if () {
-	} else if () {
         } else {//if (abs(rotate) < 0.0001 ) {
 	    
 	    double alpha = 1;
-            twist.linear.x = 0.1;
-	    if (fabs(rotate) < 0.16*2) 
+        twist.linear.x = 0.1;
+        double temp = mc.wallTooClose();
+        if (temp) {
+            twist.angular.z = temp;
+        } else if (fabs(rotate) < 0.16*2)
             	twist.angular.z = alpha*(-rotate);
    	    else twist.angular.z = 0;
 	    ROS_INFO("Rotation speed: %f", twist.angular.z);
