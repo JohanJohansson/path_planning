@@ -30,10 +30,13 @@ cell down(1, 0);
 cell left(0, -1);
 cell directions[] = {up, right, down, left};
 
+
+//Test if a cell is withing bounds
 bool withinBounds(int rows, int cols, const cell& c) {
     return c.x >= 0 && c.x < cols && c.y >= 0 && c.y < rows;
 }
 
+//Flood the map, starting from goal
 void flood(std::vector<std::vector<int> >& map, int rows, int cols, const cell& goal) {
     map[goal.y][goal.x] = 2;
     std::queue<cell> floodQue;
@@ -62,6 +65,8 @@ void flood(std::vector<std::vector<int> >& map, int rows, int cols, const cell& 
     }
 }
 
+//Finds the next cell relative to the currentCell using an already flooded map.
+//The direction is used to favor the direction used from last step in order to avoid unnecesarry turns.
 cell nextCell(const std::vector<std::vector<int> >& map, int rows, int cols, const cell& currentCell, cell& direction) {
     cell pref = currentCell + direction;
     if(withinBounds(rows, cols, pref) && map[pref.y][pref.x] == currentCell.cost-1) {
@@ -82,6 +87,8 @@ cell nextCell(const std::vector<std::vector<int> >& map, int rows, int cols, con
     return currentCell;
 }
 
+
+//Use the flooded map to backtrack a path between the start and goal.
 void backTrackPath(const std::vector<std::vector<int> >& map, int rows, int cols, cell start, std::vector<cell>& outPath) {
     start.cost = map[start.y][start.x];
     outPath.push_back(start);
@@ -117,6 +124,7 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
         backTrackPath(floodMap, rows, cols, cell(start.position.y, start.position.x), path);
         geometry_msgs::Pose pose;
 
+        //Add the path to the output vector
         for(size_t i = 0; i < path.size(); ++i) {
             pose.position.x = path[i].x;
             pose.position.y = path[i].y;
