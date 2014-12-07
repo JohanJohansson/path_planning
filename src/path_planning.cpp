@@ -15,7 +15,7 @@ enum {WALL = 300000, NOTHING = 0, ROBOT = 300001, GOAL = 1};
 //                {300000,300000,300000,300000,0,0},
 //                {0,0,0,0,0,0},
 //                {0,0,0,0,0,0}};
-//int goal_x=0, goal_y=3, robot_x=5, robot_y=3, map_x, map_y, count;
+//int goal_x=2, goal_y=1, robot_x=5, robot_y=3, map_x, map_y, count;
 //int map2[36]= {0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,300000,300000,300000,300000,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 //int map[6][6];
 int goal_x=150, goal_y=150, robot_x=250, robot_y=250, map_x, map_y, count;
@@ -108,15 +108,15 @@ int min_neighbour(int map_x, int map_y)
 
 void unpropagate_wavefront(int robot_x, int robot_y)
 {
-//    printf("before unpropogate:\n");
-//    print_map();
+    //printf("before unpropogate:\n");
+    //print_map();
     for(map_x=0; map_x<height; map_x++)
         for(map_y=0; map_y<width; map_y++)
             if(map[map_x][map_y]!=WALL && map[map_x][map_y]!=GOAL)
                 map[map_x][map_y] = NOTHING;
     map[robot_x][robot_y] = ROBOT;
- //   printf("Unpropogate:\n");
-//    print_map();
+    //printf("Unpropogate:\n");
+    //print_map();
 }
 
 int propagate_wavefront(int robot_x, int robot_y)
@@ -157,45 +157,41 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "path_planning");
     ros::NodeHandle n;
-    ros::Rate loop_rate(20);
+    ros::Rate loop_rate(1);
     // ros::Subscriber robo_sub = n.subscribe("/arduino/odometry_estimate", 1, RoboCallback);
     // ros::Subscriber goal_sub = n.subscribe("/destination", 1, GoalCallback);
     ros::Subscriber map_sub = n.subscribe("/costmap", 1, MapCallback);
-    ros::Publisher mark_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+    ros::Publisher marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1);
+    uint32_t shape = visualization_msgs::Marker::CUBE;
   //  ros::Publisher path_pub = n.advertise<nav_msgs::Path>("/path", 1);
-    visualization_msgs::Marker line;
-    line.header.frame_id = "map";
-    line.header.stamp = ros::Time();
-    line.ns = "path";
-    //line.id = 0;
-
-    line.type = visualization_msgs::Marker::LINE_STRIP;
-    line.action = visualization_msgs::Marker::ADD;
-
-    line.pose.orientation.x = 0.0;
-    line.pose.orientation.y = 0.0;
-    line.pose.orientation.z = 0.0;
-    line.pose.orientation.w = 1.0;
-
-    line.pose.position.x = 0;
-    line.pose.position.y = 0;
-    line.pose.position.z = 0;
-
-    line.scale.x = 0.1;
-    line.scale.y = 0.1;
-    line.scale.z = 0.1;
-    line.color.a = 1.0;
-    line.color.r = 0.0;
-    line.color.g = 1.0;
-    line.color.b = 0.0;
-   // vis_pub.publish(line);
-
-   // print_map();
     steps = 0;
     robo_path_ori_x[0] = robot_x;
     robo_path_ori_y[0] = robot_y;
     while(ros::ok())
     {
+            visualization_msgs::Marker line;
+            line.header.frame_id = "map";
+            line.header.stamp = ros::Time();
+            line.ns = "path";
+            line.type = visualization_msgs::Marker::LINE_STRIP;
+            line.action = visualization_msgs::Marker::ADD;
+
+            line.pose.orientation.x = 0.0;
+            line.pose.orientation.y = 0.0;
+            line.pose.orientation.z = 0.0;
+            line.pose.orientation.w = 1.0;
+
+            line.pose.position.x = 0;
+            line.pose.position.y = 0;
+            line.pose.position.z = 0;
+
+            line.scale.x = 0.1;
+            line.scale.y = 0.1;
+            line.scale.z = 0.1;
+            line.color.a = 1.0;
+            line.color.r = 0.0;
+            line.color.g = 1.0;
+            line.color.b = 0.0;
         while(map[robot_x][robot_y]!=GOAL)
         {
             new_state=propagate_wavefront(robot_x,robot_y);
@@ -233,15 +229,18 @@ int main(int argc, char **argv)
             printf("x: %d, y: %d\n", robo_path_x[i], robo_path_y[i]);
             geometry_msgs::Point p;
             line.id = i;
-            p.x = robo_path_x[i];
-            p.y = robo_path_y[i];
+            p.x = robo_path_x[i]/100.0+4.0;
+            p.y = robo_path_y[i]/100.0+3.0;
 
             line.points.push_back(p);
+            marker_pub.publish(line);
         }
-        mark_pub.publish(line);
+
+       // marker_pub.publish(line);
        // path_pub.publish(path);
         ros::spinOnce();
         loop_rate.sleep();
+    }
     return 0;
-}
+
 }
