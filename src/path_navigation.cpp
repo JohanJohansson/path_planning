@@ -413,6 +413,8 @@ public:
                 //mc.setClientCall(RIGHT_TURN);
             //else //mc.setClientCall(LEFT_TURN);
             	//makeTurn(rotate);
+	} else if () {
+	} else if () {
         } else {//if (abs(rotate) < 0.0001 ) {
 	    
 	    double alpha = 1;
