@@ -236,17 +236,24 @@ public:
         }
     }
 
-    //Checks the ir sensors which decides what state to use
-    int chooseState() {
+    bool wallInFront() {
         int tresh_front = 15;//17;
-        int s;
-
-        //Checks if robot is close to a wall do turn, else follow wall or go forward
         if ((forward_left < tresh_front &&
                 forward_left >= 0) ||
                 (forward_right < tresh_front && forward_right >= 0) ||
                 (forward_left > 40 && forward_right < 20) ||
                 (forward_right > 40 && forward_left < 20)) {
+            return true;
+        }
+        return false;
+    }
+
+    //Checks the ir sensors which decides what state to use
+    int chooseState() {
+        int s;
+
+        //Checks if robot is close to a wall do turn, else follow wall or go forward
+        if (wallInFront()) {
                 /*if (front_left > front_right ||
                        back_left > back_right) {
                     s = LEFT_TURN;
@@ -375,64 +382,17 @@ public:
         ROS_INFO("Pose x: %f y: %f theta: %f", pose.x, pose.y, pose.theta);
     }
 
-    /*//Callback for the encoders
-    void EncoderCallback(const ras_arduino_msgs::EncodersConstPtr &msg) {
-        delta_encoder_left = msg->delta_encoder2;
-        delta_encoder_right = msg->delta_encoder1;
-        //ROS_INFO("Delta left: %d Delta right: %d", delta_encoder_left, delta_encoder_right);
-    }*/
-
-    /*//Method for driving the robot a specific distance
-    void forward(double distance) {
-        ROS_INFO("Drives forward %f cm", distance);
-        double wheel_radius = 5.0;
-
-        double distance_per_wheel = 2*M_PI*wheel_radius;
-        double distance_per_tick = distance_per_wheel/360;
-
-        int ticks = nearbyint(distance/distance_per_tick);
-
-        twist.linear.x = 0.13;
-        twist.linear.y = 0;
-        twist.linear.z = 0;
-        twist.angular.x = 0;
-        twist.angular.y = 0;
-        twist.angular.z = 0;
-
-        int left_encoder = 0;
-        int right_encoder = 0;
-
-        int tresh_front = 17;
-
-        ros::Rate loop_rate(20);
-        while (abs(left_encoder) < ticks && abs(right_encoder) < ticks) {
-
-            ros::spinOnce();
-
-            if ((forward_left < tresh_front &&
-                forward_left > 0) ||
-                (forward_right < tresh_front &&
-                forward_right > 0)) break;
-
-            left_encoder += delta_encoder_left;
-            right_encoder += delta_encoder_right;
-
-            twist_pub.publish(msg);
-
-            loop_rate.sleep();
-        }
-    }*/
-
     void followPath() {
         int index = findCarrot();
 
-        double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
+        //double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
+        double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
 
         double rotate = pose.theta - angle;
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
         if (abs(rotate)>=M_PI_2) {
-            if (rotate < 0)
+            if (rotate > 0)
                 mc.setClientCall(LEFT_TURN);
             else mc.setClientCall(RIGHT_TURN);
             //makeTurn(rotate);
