@@ -258,10 +258,12 @@ public:
                 front_right < 9 && front_right > 0 && back_right < 9 && back_right > 0)
             return 0.0;
         else if (front_left < 9 && front_left > 0 && back_left < 9 && back_left > 0) {
-            return -0.314;
+            return -0.314*0.7;
         } else if (front_right < 9 && front_right > 0 && back_right < 9 && back_right > 0) {
-            return 0.314;
-        }
+            return 0.314*0.7;
+        } else {
+	    return 0.0;
+	}
     }
 
     //Checks the ir sensors which decides what state to use
@@ -383,7 +385,7 @@ public:
         }
         for (int i = 0; i < 50; i++) {
             point.pose.position.x = 49/100.0;
-            point.pose.position.y = 49/100.0 + i/100.0;
+            point.pose.position.y = 49/100.0 - i/100.0;
             path.poses[i+100] = point;
             ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
         }
@@ -416,15 +418,27 @@ public:
         double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
         double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
-        //double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
         double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
+        //double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
         double angle_v = atan2(y, x);
 
-        double rotate = pose.theta + M_PI_2 - angle_v;
+	double rotate;
+
+	double dist = sqrt(pow(path.poses[index_closest].pose.position.x-pose.x,2) + pow(path.poses[index_closest].pose.position.y-pose.y,2));
+	if (dist > 0.05) {
+	   rotate = pose.theta + M_PI_2 - angle;
+	} else
+	   rotate = pose.theta + M_PI_2 - angle_v;
+	if (rotate > M_PI) {
+		rotate -= 2*M_PI;
+	} else if (rotate < -M_PI) {
+		rotate += 2*M_PI; 
+	}
 	ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
         if (rotate >=M_PI_2*0.9 || rotate <= -M_PI_2*0.9) {
+	    ROS_INFO("Make large turn");
             //if (rotate > 0)
 		makeTurn(-rotate);
                 //mc.setClientCall(RIGHT_TURN);
@@ -433,13 +447,17 @@ public:
         } else {//if (abs(rotate) < 0.0001 ) {
 	    
 	    double alpha = 1;
-        twist.linear.x = 0.1;
-        double temp = mc.wallTooClose();
-        if (temp) {
-            twist.angular.z = temp;
-        } else if (fabs(rotate) < 0.16*2)
+            twist.linear.x = 0.1;
+            double temp = mc.wallTooClose();
+            if (temp != 0) {
+	       ROS_INFO("Wall too close %f", temp);
+               twist.angular.z = temp;
+            } else if (fabs(rotate) < 0.16*2) {
+		ROS_INFO("Corrects heading");
             	twist.angular.z = alpha*(-rotate);
+	    }
    	    else twist.angular.z = 0;
+
 	    ROS_INFO("Rotation speed: %f", twist.angular.z);
             //double distance = calculate_distance(index);
             //mc.forward(abs(path.poses[index].pose.position.y-pose.y));
@@ -479,7 +497,7 @@ public:
                 //return i;
             }
         }
-
+                ROS_INFO("Index %d, x: %f y: %f", index, path.poses[index].pose.position.x, path.poses[index].pose.position.y);
         if(sqrt(pow(pose.x-path.poses[path.poses.size()-1].pose.position.x, 2) + pow(pose.y-path.poses[path.poses.size()-1].pose.position.y, 2)) <= 0.05)
                 goal_reached = true;
 
