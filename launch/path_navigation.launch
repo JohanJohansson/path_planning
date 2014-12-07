@@ -6,7 +6,10 @@
     <node pkg="wall_follower" type="turn_controller" name="turn_controller" output="screen" >
     </node>
 
-    <include file="$(find mapping)/launch/mapping_launch.launch" />
+    <node pkg="odometry_estimate" type="pose_estimation" name="pose_estimation" />
+    <node pkg="transforms" type="ir_transform_node" name="ir_transform" output="screen" />
+
+    <include file="$(find transforms)/launch/transforms_launch.launch" />
 
 </launch>
 

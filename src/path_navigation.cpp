@@ -350,7 +350,7 @@ public:
         look_ahead = 0.2;
         goal_reached = false;
 
-        path.poses.resize(100);
+        path.poses.resize(150);
         geometry_msgs::PoseStamped point;
 
         for (int i = 0; i < 50; i++) {
@@ -363,6 +363,12 @@ public:
             point.pose.position.x = i/100.0;
             point.pose.position.y = 49/100.0;
             path.poses[i+50] = point;
+            ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
+        }
+        for (int i = 0; i < 50; i++) {
+            point.pose.position.x = 49/100.0;
+            point.pose.position.y = 49/100.0 + i/100.0;
+            path.poses[i+100] = point;
             ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
         }
 
@@ -384,24 +390,40 @@ public:
 
     void followPath() {
         int index = findCarrot();
+	int index_closest = findClosest();
+
+	if (index == -1) {
+		ROS_INFO("Out of track");
+		return;
+	}
+	double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
+	double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
         //double angle = atan2(path.poses[index].pose.position.x-pose.x, path.poses[index].pose.position.y-pose.y);
         double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
+        double angle_v = atan2(y, x);
 
-        double rotate = pose.theta - angle;
+        double rotate = pose.theta + M_PI_2 - angle_v;
+	ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
-        if (abs(rotate)>=M_PI_2) {
-            if (rotate > 0)
-                mc.setClientCall(LEFT_TURN);
-            else mc.setClientCall(RIGHT_TURN);
-            //makeTurn(rotate);
-        } else if (abs(rotate) < 0.0001 ) {
+        if (rotate >=M_PI_2*0.9 || rotate <= -M_PI_2*0.9) {
+            //if (rotate > 0)
+		makeTurn(-rotate);
+                //mc.setClientCall(RIGHT_TURN);
+            //else //mc.setClientCall(LEFT_TURN);
+            	//makeTurn(rotate);
+        } else {//if (abs(rotate) < 0.0001 ) {
+	    
+	    double alpha = 1;
             twist.linear.x = 0.1;
-            twist.angular.z = 0;
-            double distance = calculate_distance(index);
+	    if (fabs(rotate) < 0.16*2) 
+            	twist.angular.z = alpha*(-rotate);
+   	    else twist.angular.z = 0;
+	    ROS_INFO("Rotation speed: %f", twist.angular.z);
+            //double distance = calculate_distance(index);
             //mc.forward(abs(path.poses[index].pose.position.y-pose.y));
-            mc.forward(distance);
+            //mc.forward(distance);
             twist_pub.publish(twist);
         }
     }
@@ -438,33 +460,35 @@ public:
             }
         }
 
-        if(sqrt(pow(pose.x-path.poses[path.poses.size()-1].pose.position.x, 2) + pow(pose.y-path.poses[path.poses.size()-1].pose.position.y, 2) <= look_ahead))
+        if(sqrt(pow(pose.x-path.poses[path.poses.size()-1].pose.position.x, 2) + pow(pose.y-path.poses[path.poses.size()-1].pose.position.y, 2)) <= 0.05)
                 goal_reached = true;
 
-        if(index > 0) return index;
-        else return -1;
+	return index;
 
     }
 
     double calculate_distance(int index_carrot) {
         //int index_closest = findClosest();
-        ROS_INFO("Path coordinates x:%f y:%f", path.poses[index_carrot].pose.position.x, path.poses[index_carrot].pose.position.y);
-        double distance_x = abs(path.poses[index_carrot].pose.position.x - pose.x);//path.poses[index_closest].pose.position.x;
-        double distance_y = abs(path.poses[index_carrot].pose.position.y - pose.y);//path.poses[index_closest].pose.position.y;
+        ROS_INFO("Path coordinates x:%f y:%f Index: %d", path.poses[index_carrot].pose.position.x, path.poses[index_carrot].pose.position.y, index_carrot);
+	ROS_INFO("Test pose x: %f y: %f", pose.x, pose.y);
+        double distance_x = fabs(100.0*(path.poses[index_carrot].pose.position.x - pose.x));//path.poses[index_closest].pose.position.x;
+        double distance_y = fabs(100.0*(path.poses[index_carrot].pose.position.y - pose.y));//path.poses[index_closest].pose.position.y;
 
+	ROS_INFO("Distance x: %f y: %f", distance_x, distance_y);
         if (distance_x > distance_y)
             return distance_y;
         else return distance_x;
     }
 
-    void makeTurn(int angle) {
+    void makeTurn(double angle) {
         robot_msgs::MakeTurn turn_srv;
         if (angle < 0) {
             turn_srv.request.state = RIGHT_TURN;
         } else {
             turn_srv.request.state = LEFT_TURN;
         }
-        turn_srv.request.degrees = abs(angle);
+        turn_srv.request.degrees = fabs(angle)*180/M_PI;
+	ROS_INFO("Degrees to rotate: %f", angle);
 
         if (turn_client.call(turn_srv)) {
             ROS_INFO("Succesfully called turn service");
@@ -477,6 +501,12 @@ public:
 
     bool reachedGoal() {
         return goal_reached;
+    }
+
+    void stop() {
+	twist.linear.x = 0.0;
+        twist.angular.z = 0.0;
+        twist_pub.publish(twist);
     }
 
 private:
@@ -503,6 +533,8 @@ int main(int argc, char **argv) {
         nav.followPath();
         loop_rate.sleep();
     }
+
+    nav.stop();
 
     return 0;
 }
