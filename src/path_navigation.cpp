@@ -1,6 +1,10 @@
 #include <ros/ros.h>
 #include <nav_msgs/Path.h>
 #include <ras_arduino_msgs/Odometry.h>
+#include <nav_msgs/OccupancyGrid.h>
+#include <robot_msgs/useMazeFollower.h>
+#include "path_planning.hpp"
+#include <visualization_msgs/Marker.h>
 
 #include <geometry_msgs/Twist.h>
 #include <ras_arduino_msgs/ADConverter.h>
@@ -352,23 +356,30 @@ public:
     ros::Subscriber pose_sub;
     ros::Publisher turn_pub;
     ros::Publisher twist_pub;
-    ros::Subscriber encoder_sub;
+    ros::Subscriber cost_map_sub;
     ros::ServiceClient turn_client;
+    ros::ServiceServer path_server;
+    ros::Publisher marker_pub;
     MazeController mc;
+    ros::Publisher costMap_publisher;
+
     Navigation() {
         n = ros::NodeHandle();
         path_sub = n.subscribe("/path", 1, &Navigation::pathCallback, this);
         pose_sub = n.subscribe("/arduino/odometry", 1, &Navigation::odometryCallback, this);
         twist_pub = n.advertise<geometry_msgs::Twist>("/motor_controller/twist", 1);
         turn_client = n.serviceClient<robot_msgs::MakeTurn>("/make_turn");
-        //encoder_sub = n.subscribe("/arduino/encoders", 1, &Navigation::EncoderCallback, this);
+        cost_map_sub = n.subscribe("/costmap", 1, &Navigation::costMapCallback, this);
+        path_server = n.advertiseService("/use_path_follower", &Navigation::findAndFollowPath, this);
+        marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 10);
+        costMap_publisher = n.advertise<nav_msgs::OccupancyGrid>("/test_costmap", 1);
 
         mc = MazeController();
 
         look_ahead = 0.2;
         goal_reached = false;
 
-        path.poses.resize(150);
+        /*path.poses.resize(150);
         geometry_msgs::PoseStamped point;
 
         for (int i = 0; i < 50; i++) {
@@ -388,11 +399,7 @@ public:
             point.pose.position.y = 49/100.0 - i/100.0;
             path.poses[i+100] = point;
             ROS_INFO("Point x: %f y: %f", point.pose.position.x, point.pose.position.y);
-        }
-
-      /*pose.x = 8;
-        pose.y = -2;
-        pose.theta = 1.3;*/
+        }*/
     }
 
     ~Navigation() {}
@@ -403,7 +410,11 @@ public:
 
     void odometryCallback(const ras_arduino_msgs::Odometry &msg) {
         pose = msg;
-        ROS_INFO("Pose x: %f y: %f theta: %f", pose.x, pose.y, pose.theta);
+        //ROS_INFO("Pose x: %f y: %f theta: %f", pose.x, pose.y, pose.theta);
+    }
+
+    void costMapCallback(const nav_msgs::OccupancyGrid &msg) {
+        cost_map = msg;
     }
 
     void followPath() {
@@ -419,49 +430,43 @@ public:
         double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
         double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
-        //double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
         double angle_v = atan2(y, x);
 
-	double rotate;
+        double rotate;
 
-	double dist = sqrt(pow(path.poses[index_closest].pose.position.x-pose.x,2) + pow(path.poses[index_closest].pose.position.y-pose.y,2));
-	if (dist > 0.05) {
-	   rotate = pose.theta + M_PI_2 - angle;
-	} else
-	   rotate = pose.theta + M_PI_2 - angle_v;
-	if (rotate > M_PI) {
-		rotate -= 2*M_PI;
-	} else if (rotate < -M_PI) {
-		rotate += 2*M_PI; 
-	}
-	ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
+        double dist = sqrt(pow(path.poses[index_closest].pose.position.x-pose.x,2) + pow(path.poses[index_closest].pose.position.y-pose.y,2));
+        if (dist > 0.05) {
+           rotate = pose.theta + M_PI_2 - angle;
+        } else
+           rotate = pose.theta + M_PI_2 - angle_v;
+        if (rotate > M_PI) {
+            rotate -= 2*M_PI;
+        } else if (rotate < -M_PI) {
+            rotate += 2*M_PI;
+        }
+
+        ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
         if (rotate >=M_PI_2*0.97 || rotate <= -M_PI_2*0.97) {
-	    ROS_INFO("Make large turn");
-            //if (rotate > 0)
-		makeTurn(-rotate);
-                //mc.setClientCall(RIGHT_TURN);
-            //else //mc.setClientCall(LEFT_TURN);
-            	//makeTurn(rotate);
-        } else {//if (abs(rotate) < 0.0001 ) {
+            ROS_INFO("Make large turn");
+            makeTurn(-rotate);
+
+        } else {
 	    
-	    double alpha = 2;
+            double alpha = 2;
             twist.linear.x = 0.1;
             double temp = mc.wallTooClose();
             if (temp != 0) {
-	       ROS_INFO("Wall too close %f", temp);
-               twist.angular.z = temp;
+                ROS_INFO("Wall too close %f", temp);
+                twist.angular.z = temp;
             } else if (fabs(rotate) < 0.16*2) {
-		ROS_INFO("Corrects heading");
+                ROS_INFO("Corrects heading");
             	twist.angular.z = alpha*(-rotate);
-	    }
-   	    else twist.angular.z = 0;
+            }
+            else {twist.angular.z = 0;}
 
-	    ROS_INFO("Rotation speed: %f", twist.angular.z);
-            //double distance = calculate_distance(index);
-            //mc.forward(abs(path.poses[index].pose.position.y-pose.y));
-            //mc.forward(distance);
+            ROS_INFO("Rotation speed: %f", twist.angular.z);
             twist_pub.publish(twist);
         }
     }
@@ -472,11 +477,8 @@ public:
         for (int i = 0; i < path.poses.size(); i++) {
             double distance = sqrt(pow(pose.x-path.poses[i].pose.position.x, 2) + pow(pose.y-path.poses[i].pose.position.y, 2));
             if (distance < dist) {
-                //ROS_INFO("Index %d, x: %f y: %f", i, path.poses[i].pose.position.x, path.poses[i].pose.position.y);
-                //ROS_INFO("Angle %f", atan2(path.poses[i].pose.position.y-pose.y, path.poses[i].pose.position.x)-pose.theta);
                 index = i;
                 dist = distance;
-                //return i;
             }
         }
 
@@ -491,10 +493,7 @@ public:
         for (int i = 0; i < path.poses.size(); i++) {
             double distance = sqrt(pow(pose.x-path.poses[i].pose.position.x, 2) + pow(pose.y-path.poses[i].pose.position.y, 2));
             if (distance <= look_ahead) {
-                //ROS_INFO("Index %d, x: %f y: %f", i, path.poses[i].pose.position.x, path.poses[i].pose.position.y);
-                //ROS_INFO("Angle %f", atan2(path.poses[i].pose.position.y-pose.y, path.poses[i].pose.position.x)-pose.theta);
                 index = i;
-                //return i;
             }
         }
                 ROS_INFO("Index %d, x: %f y: %f", index, path.poses[index].pose.position.x, path.poses[index].pose.position.y);
@@ -505,19 +504,6 @@ public:
 
     }
 
-    double calculate_distance(int index_carrot) {
-        //int index_closest = findClosest();
-        ROS_INFO("Path coordinates x:%f y:%f Index: %d", path.poses[index_carrot].pose.position.x, path.poses[index_carrot].pose.position.y, index_carrot);
-	ROS_INFO("Test pose x: %f y: %f", pose.x, pose.y);
-        double distance_x = fabs(100.0*(path.poses[index_carrot].pose.position.x - pose.x));//path.poses[index_closest].pose.position.x;
-        double distance_y = fabs(100.0*(path.poses[index_carrot].pose.position.y - pose.y));//path.poses[index_closest].pose.position.y;
-
-	ROS_INFO("Distance x: %f y: %f", distance_x, distance_y);
-        if (distance_x > distance_y)
-            return distance_y;
-        else return distance_x;
-    }
-
     void makeTurn(double angle) {
         robot_msgs::MakeTurn turn_srv;
         if (angle < 0) {
@@ -526,7 +512,7 @@ public:
             turn_srv.request.state = LEFT_TURN;
         }
         turn_srv.request.degrees = fabs(angle)*180/M_PI;
-	ROS_INFO("Degrees to rotate: %f", angle);
+        ROS_INFO("Degrees to rotate: %f", angle);
 
         if (turn_client.call(turn_srv)) {
             ROS_INFO("Succesfully called turn service");
@@ -542,9 +528,71 @@ public:
     }
 
     void stop() {
-	twist.linear.x = 0.0;
+        twist.linear.x = 0.0;
         twist.angular.z = 0.0;
         twist_pub.publish(twist);
+    }
+
+    bool findAndFollowPath(robot_msgs::useMazeFollower::Request &req, robot_msgs::useMazeFollower::Response &res) {
+
+        if (req.go == true) {
+            ROS_INFO("Wants to plan a path.");
+            geometry_msgs::Pose goal, start;
+            std::vector<geometry_msgs::Pose> path;
+            //nav_msgs::Path path;
+            double resolution = 0.02;
+            double center_x = 5.0;
+            double center_y = 5.0;
+            goal.position.x = 250;
+            goal.position.y = 250;
+            start.position.x = floor((center_x + pose.x)/resolution);
+            start.position.y = floor((center_y + pose.y)/resolution);
+            ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
+
+            nav_msgs::OccupancyGrid temp = cost_map;
+            temp.info.height = 500;
+            temp.info.width = 500;
+
+            costMap_publisher.publish(temp);
+            planPathGoal(temp, start, goal, path);
+
+            visualization_msgs::Marker points;
+            points.header.frame_id = "map";
+            points.header.stamp = ros::Time::now();
+            points.ns = "path";
+            points.action = visualization_msgs::Marker::ADD;
+            points.pose.orientation.w = 1.0;
+            points.id = 0;
+            points.type = visualization_msgs::Marker::LINE_STRIP;
+            points.scale.x = 0.02;
+            points.color.r = 1.0;
+            points.color.a = 1.0;
+            points.lifetime = ros::Duration(0);
+            points.pose.position.x = 5;
+            points.pose.position.y = 5;
+
+            ROS_INFO("Length of path %lu", path.size());
+            for (int i = 0; i < path.size(); i++) {
+                geometry_msgs::Point p;
+                p.x = path[i].position.x*resolution-5.0;
+                p.y = path[i].position.y*resolution-5.0;
+                p.z = 0;
+                ROS_INFO("Cells x: %f y: %f", p.x, p.y);
+                points.points.push_back(p);
+            }
+            ros::Rate loop_rate(RATE);
+            while (!reachedGoal()) {
+                ros::spinOnce();
+                nav.followPath();
+                loop_rate.sleep();
+            }
+
+            stop();
+            //ROS_INFO("Number of points %lu", points.points.size());
+            marker_pub.publish(points);
+        } else ROS_INFO("Don't plan a path");
+
+        return true;
     }
 
 private:
@@ -552,9 +600,8 @@ private:
     ras_arduino_msgs::Odometry pose;
     double look_ahead;
     bool goal_reached;
-    //int delta_encoder_left;
-    //int delta_encoder_right;
     geometry_msgs::Twist twist;
+    nav_msgs::OccupancyGrid cost_map;
 
 };
 
@@ -565,14 +612,15 @@ int main(int argc, char **argv) {
     Navigation nav;
 
     ros::Duration(2.0).sleep();
-    ros::Rate loop_rate(RATE);
-    while (!nav.reachedGoal()) {
+    //ros::Rate loop_rate(RATE);
+    /*while (!nav.reachedGoal()) {
         ros::spinOnce();
         nav.followPath();
         loop_rate.sleep();
     }
 
     nav.stop();
-
+*/
+    ros::spin();
     return 0;
 }

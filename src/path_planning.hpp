@@ -104,9 +104,10 @@ void backTrackPath(const std::vector<std::vector<int> >& map, int rows, int cols
 void planPathGoal(const nav_msgs::OccupancyGrid& map,
                   const geometry_msgs::Pose& start,
                   const geometry_msgs::Pose& goal,
-                  std::vector<geometry_msgs::Pose> outPath) {
+                  std::vector<geometry_msgs::Pose>& outPath) {
     int rows = map.info.height;
     int cols = map.info.width;
+    ROS_INFO("Rows: %d Columns: %d", rows, cols);
     std::vector<std::vector<int> > floodMap(rows, std::vector<int>(cols));
 
     for(int y = 0; y < rows; ++y) {
@@ -115,6 +116,7 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
             floodMap[y][x] = map.data[index + x] == WALL || map.data[index + x] == UNEXPLORED;
         }
     }
+    ROS_INFO("Flooded map");
 
     std::vector<cell> path;
     flood(floodMap, rows, cols, cell(goal.position.y, goal.position.x));
@@ -131,6 +133,7 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
             outPath.push_back(pose);
         }
     }
+    ROS_INFO("Done with path planning, length is %lu", outPath.size());
 }
 
 #endif // PATH_PLANNING_HPP
