@@ -365,7 +365,7 @@ public:
 
     Navigation() {
         n = ros::NodeHandle();
-        path_sub = n.subscribe("/path", 1, &Navigation::pathCallback, this);
+        //path_sub = n.subscribe("/path", 1, &Navigation::pathCallback, this);
         pose_sub = n.subscribe("/arduino/odometry", 1, &Navigation::odometryCallback, this);
         twist_pub = n.advertise<geometry_msgs::Twist>("/motor_controller/twist", 1);
         turn_client = n.serviceClient<robot_msgs::MakeTurn>("/make_turn");
@@ -378,6 +378,9 @@ public:
 
         look_ahead = 0.2;
         goal_reached = false;
+        resolution = 0.02;
+        center_x = 5.0;
+        center_y = 5.0;
 
         /*path.poses.resize(150);
         geometry_msgs::PoseStamped point;
@@ -404,9 +407,9 @@ public:
 
     ~Navigation() {}
 
-    void pathCallback(const nav_msgs::Path &msg) {
+    /*void pathCallback(const nav_msgs::Path &msg) {
         path = msg;
-    }
+    }*/
 
     void odometryCallback(const ras_arduino_msgs::Odometry &msg) {
         pose = msg;
@@ -415,6 +418,8 @@ public:
 
     void costMapCallback(const nav_msgs::OccupancyGrid &msg) {
         cost_map = msg;
+        cost_map.info.height = 500;
+        cost_map.info.width = 500;
     }
 
     void followPath() {
@@ -429,12 +434,18 @@ public:
         double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
         double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
-        double angle = atan2(path.poses[index].pose.position.y-pose.y, path.poses[index].pose.position.x-pose.x);
+        //Same here as description below
+        double angle = atan2((path.poses[index_closest].pose.position.y * resolution - center_y)-pose.y,
+                             (path.poses[index_closest].pose.position.x * resolution - center_x)-pose.x);
         double angle_v = atan2(y, x);
 
         double rotate;
 
-        double dist = sqrt(pow(path.poses[index_closest].pose.position.x-pose.x,2) + pow(path.poses[index_closest].pose.position.y-pose.y,2));
+        //TODO Check if it makes sense by taking path position * resolution - center_
+        //At least know when using the pose from /arduino/odometry since (0,0) for robot is at (5.0, 5.0) in map.
+        //Will be different if subscribing to localization if that pose is with origin (0,0) in map.
+        double dist = sqrt(pow((path.poses[index_closest].pose.position.x * resolution - center_x)-pose.x,2)
+                           + pow((path.poses[index_closest].pose.position.y * resolution - center_y)-pose.y,2));
         if (dist > 0.05) {
            rotate = pose.theta + M_PI_2 - angle;
         } else
@@ -533,66 +544,66 @@ public:
         twist_pub.publish(twist);
     }
 
+    //Finds the path between start and goal if possible and then drives there
     bool findAndFollowPath(robot_msgs::useMazeFollower::Request &req, robot_msgs::useMazeFollower::Response &res) {
 
         if (req.go == true) {
             ROS_INFO("Wants to plan a path.");
             geometry_msgs::Pose goal, start;
-            std::vector<geometry_msgs::Pose> path;
-            //nav_msgs::Path path;
-            double resolution = 0.02;
-            double center_x = 5.0;
-            double center_y = 5.0;
             goal.position.x = 250;
             goal.position.y = 250;
             start.position.x = floor((center_x + pose.x)/resolution);
             start.position.y = floor((center_y + pose.y)/resolution);
             ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
 
-            nav_msgs::OccupancyGrid temp = cost_map;
-            temp.info.height = 500;
-            temp.info.width = 500;
+            //costMap_publisher.publish(temp);
+            planPathGoal(cost_map, start, goal, path);
+            //ROS_INFO("Length of path %lu", path.poses.size());
+            visualizePath();
 
-            costMap_publisher.publish(temp);
-            planPathGoal(temp, start, goal, path);
-
-            visualization_msgs::Marker points;
-            points.header.frame_id = "map";
-            points.header.stamp = ros::Time::now();
-            points.ns = "path";
-            points.action = visualization_msgs::Marker::ADD;
-            points.pose.orientation.w = 1.0;
-            points.id = 0;
-            points.type = visualization_msgs::Marker::LINE_STRIP;
-            points.scale.x = 0.02;
-            points.color.r = 1.0;
-            points.color.a = 1.0;
-            points.lifetime = ros::Duration(0);
-            points.pose.position.x = 5;
-            points.pose.position.y = 5;
-
-            ROS_INFO("Length of path %lu", path.size());
-            for (int i = 0; i < path.size(); i++) {
-                geometry_msgs::Point p;
-                p.x = path[i].position.x*resolution-5.0;
-                p.y = path[i].position.y*resolution-5.0;
-                p.z = 0;
-                ROS_INFO("Cells x: %f y: %f", p.x, p.y);
-                points.points.push_back(p);
-            }
+            //Follows path until it reaches goal point
             ros::Rate loop_rate(RATE);
             while (!reachedGoal()) {
                 ros::spinOnce();
-                nav.followPath();
+                followPath();
                 loop_rate.sleep();
             }
 
             stop();
-            //ROS_INFO("Number of points %lu", points.points.size());
-            marker_pub.publish(points);
         } else ROS_INFO("Don't plan a path");
 
         return true;
+    }
+
+    //Publishes the path to be visualized in Rviz
+    void visualizePath() {
+
+        visualization_msgs::Marker points;
+        points.header.frame_id = "map";
+        points.header.stamp = ros::Time::now();
+        points.ns = "path";
+        points.action = visualization_msgs::Marker::ADD;
+        points.pose.orientation.w = 1.0;
+        points.id = 0;
+        points.type = visualization_msgs::Marker::LINE_STRIP;
+        points.scale.x = 0.02;
+        points.color.r = 1.0;
+        points.color.a = 1.0;
+        points.lifetime = ros::Duration(0);
+        points.pose.position.x = 5;
+        points.pose.position.y = 5;
+
+        ROS_INFO("Length of path %lu", path.poses.size());
+        for (int i = 0; i < path.poses.size(); i++) {
+            geometry_msgs::Point p;
+            p.x = path.poses[i].pose.position.x * resolution - center_x;
+            p.y = path.poses[i].pose.position.y * resolution - center_y;
+            p.z = 0;
+            //ROS_INFO("Cells x: %f y: %f", p.x, p.y);
+            points.points.push_back(p);
+        }
+        marker_pub.publish(points);
+
     }
 
 private:
@@ -602,6 +613,9 @@ private:
     bool goal_reached;
     geometry_msgs::Twist twist;
     nav_msgs::OccupancyGrid cost_map;
+    double resolution;
+    double center_x;
+    double center_y;
 
 };
 
@@ -611,7 +625,7 @@ int main(int argc, char **argv) {
 
     Navigation nav;
 
-    ros::Duration(2.0).sleep();
+    //ros::Duration(1.0).sleep();
     //ros::Rate loop_rate(RATE);
     /*while (!nav.reachedGoal()) {
         ros::spinOnce();
