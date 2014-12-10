@@ -118,14 +118,10 @@ public:
         pose_carrot.position.x = path.poses[index].pose.position.x * resolution - center_x;
         pose_carrot.position.y = path.poses[index].pose.position.y * resolution - center_y;
 
-        ROS_INFO("CC %f %f %f %f", pose_carrot.position.x, pose_carrot.position.y, pose_closest.position.x, pose_closest.position.y);
+        double x = pose_carrot.position.x - pose_closest.position.x;
+        double y = pose_carrot.position.y - pose_closest.position.y;
 
-        double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
-        double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
-
-        //Same here as description below
-        double angle = atan2((path.poses[index].pose.position.y * resolution - center_y) - pose.y,
-                             (path.poses[index].pose.position.x * resolution - center_x) - pose.x);
+        double angle = atan2(pose_carrot.position.y - pose.y, pose_carrot.position.x - pose.x);
         double angle_v = atan2(y, x);
 
         double rotate;
@@ -133,8 +129,7 @@ public:
         //TODO Check if it makes sense by taking path position * resolution - center_
         //At least know when using the pose from /arduino/odometry since (0,0) for robot is at (5.0, 5.0) in map.
         //Will be different if subscribing to localization if that pose is with origin (0,0) in map.
-        double dist = sqrt(pow((path.poses[index_closest].pose.position.x * resolution - center_x) - pose.x,2)
-                           + pow((path.poses[index_closest].pose.position.y * resolution - center_y) - pose.y,2));
+        double dist = sqrt(pow(pose_closest.position.x - pose.x,2) + pow(pose_closest.position.y - pose.y,2));
         if (dist > 0.05) {
            rotate = pose.theta + M_PI_2 - angle;
         } else
@@ -145,8 +140,10 @@ public:
             rotate += 2*M_PI;
         }
 
-        ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x * resolution - center_x, path.poses[index].pose.position.y*resolution - center_y);
-        ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
+        ROS_INFO("Robot x: %f y: %f", pose.x, pose.y);
+        ROS_INFO("Closest x: %f y: %f", pose_closest.position.x, pose_closest.position.y);
+        ROS_INFO("Carrot x: %f y: %f", pose_carrot.position.x, pose_carrot.position.y);
+        //ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
         if (rotate >=M_PI_2*0.97 || rotate <= -M_PI_2*0.97) {
             ROS_INFO("Make large turn");
@@ -200,7 +197,7 @@ public:
         if(sqrt(pow(pose.x-(path.poses[path.poses.size()-1].pose.position.x*resolution - center_x), 2) + pow(pose.y-(path.poses[path.poses.size()-1].pose.position.y*resolution - center_y), 2)) <= 0.05)
                 goal_reached = true;
 
-	return index;
+        return index;
 
     }
 
@@ -244,14 +241,38 @@ public:
         twist_pub.publish(twist);
     }
 
+    void findDesiredLocation(geometry_msgs::Pose goal) {//Goal x and y need to be in map indexes where (250, 250) is the middle
+        ROS_INFO("Wants to plan a path.");
+        geometry_msgs::Pose start;
+
+        start.position.x = floor((center_x + pose.x)/resolution);
+        start.position.y = floor((center_y + pose.y)/resolution);
+        ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
+
+        //costMap_publisher.publish(temp);
+        planPathGoal(cost_map, start, goal, path);
+        ROS_INFO("Length of path %lu", path.poses.size());
+        visualizePath();
+
+        //Follows path until it reaches goal point
+        ros::Rate loop_rate(RATE);
+        while (!reachedGoal()) {
+            ros::spinOnce();
+            followPath();
+            loop_rate.sleep();
+        }
+
+        stop();
+    }
+
     //Finds the path between start and goal if possible and then drives there
     bool findAndFollowPath(robot_msgs::useMazeFollower::Request &req, robot_msgs::useMazeFollower::Response &res) {
 
         if (req.go == true) {
             ROS_INFO("Wants to plan a path.");
             geometry_msgs::Pose goal, start;
-            goal.position.x = 250;
-            goal.position.y = 250;
+            goal.position.x = 250; //Goal needs to be in cell indexes
+            goal.position.y = 250; //Goal needs to be in cell indexes
             start.position.x = floor((center_x + pose.x)/resolution);
             start.position.y = floor((center_y + pose.y)/resolution);
             ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
