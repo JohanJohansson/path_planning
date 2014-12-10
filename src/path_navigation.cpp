@@ -17,6 +17,7 @@
 enum {LEFT_TURN = 1, RIGHT_TURN = 2};
 
 #define RATE 20.0
+#define ANGULAR_AVOIDANCE 0.5
 
 
 class Navigation {
@@ -144,24 +145,51 @@ public:
         ROS_INFO("Closest x: %f y: %f", pose_closest.position.x, pose_closest.position.y);
         ROS_INFO("Carrot x: %f y: %f", pose_carrot.position.x, pose_carrot.position.y);
         //ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
+        int tresh_front = 15;//17;
 
-        if (rotate >=M_PI_2*0.97 || rotate <= -M_PI_2*0.97) {
+	//Test med closest och carrot är med än eller lika med pi halva
+        if (rotate >= M_PI_2*0.94 || rotate <= -M_PI_2*0.94) {
             ROS_INFO("Make large turn");
             makeTurn(-rotate);
+	
+	} else if ((forward_left < tresh_front &&
+                forward_left >= 0) ||
+                (forward_right < tresh_front && forward_right >= 0) ||
+                (forward_left > 40 && forward_right < 20) ||
+                (forward_right > 40 && forward_left < 20)) {
+		makeTurn(-rotate);
+   	
+	} else if (front_right < front_left &&
+                      back_right < back_left &&
+                      front_right < 7 &&
+                      back_right < 7) {
+		twist.linear.x = 0.1;
+		twist.angular.z = ANGULAR_AVOIDANCE;
+		ROS_INFO("Too close to right wall");		
 
+	} else if (front_right < front_left &&
+                      back_right < back_left &&
+                      front_right < 7 &&
+                      back_right < 7) {
+		twist.linear.x = 0.1;
+		twist.angular.z = -ANGULAR_AVOIDANCE;
+		ROS_INFO("Too close to left wall");		
         } else {
 	    
-            double alpha = 2;
+            double alpha = 4;
             twist.linear.x = 0.1;
-            double temp = wallTooClose();
+            /*double temp = wallTooClose();
             if (temp != 0) {
                 ROS_INFO("Wall too close %f", temp);
                 twist.angular.z = temp;
-            } else if (fabs(rotate) < 0.16*2) {
+            } else */if (std::abs(rotate) < 0.16*2) {
                 ROS_INFO("Corrects heading");
             	twist.angular.z = alpha*(-rotate);
             }
-            else {twist.angular.z = 0;}
+            else {
+	        twist.angular.z = 0;
+		ROS_INFO("Angle too big, goes forward instead.");
+	    }
 
             ROS_INFO("Rotation speed: %f", twist.angular.z);
             twist_pub.publish(twist);
@@ -219,7 +247,7 @@ public:
         } else {
             turn_srv.request.state = LEFT_TURN;
         }
-        turn_srv.request.degrees = fabs(angle)*180/M_PI;
+        turn_srv.request.degrees = std::abs(angle)*180/M_PI;
         ROS_INFO("Degrees to rotate: %f", angle);
 
         if (turn_client.call(turn_srv)) {
