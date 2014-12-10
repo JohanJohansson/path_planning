@@ -37,8 +37,8 @@ public:
     Navigation() {
         n = ros::NodeHandle();
         //path_sub = n.subscribe("/path", 1, &Navigation::pathCallback, this);
-        //pose_sub = n.subscribe("/arduino/odometry", 1, &Navigation::odometryCallback, this);
-        pose_sub = n.subscribe("/loc/pose", 1, &Navigation::odometryCallback, this);
+        pose_sub = n.subscribe("/arduino/odometry", 1, &Navigation::odometryCallback, this);
+        //pose_sub = n.subscribe("/loc/pose", 1, &Navigation::odometryCallback, this);
         twist_pub = n.advertise<geometry_msgs::Twist>("/motor_controller/twist", 1);
         turn_client = n.serviceClient<robot_msgs::MakeTurn>("/make_turn");
         cost_map_sub = n.subscribe("/costmap", 1, &Navigation::costMapCallback, this);
@@ -112,12 +112,20 @@ public:
             return;
         }
 
+        geometry_msgs::Pose pose_closest, pose_carrot;
+        pose_closest.position.x = path.poses[index_closest].pose.position.x * resolution - center_x;
+        pose_closest.position.y = path.poses[index_closest].pose.position.y * resolution - center_y;
+        pose_carrot.position.x = path.poses[index].pose.position.x * resolution - center_x;
+        pose_carrot.position.y = path.poses[index].pose.position.y * resolution - center_y;
+
+        ROS_INFO("CC %f %f %f %f", pose_carrot.position.x, pose_carrot.position.y, pose_closest.position.x, pose_closest.position.y);
+
         double x = path.poses[index].pose.position.x - path.poses[index_closest].pose.position.x;
         double y = path.poses[index].pose.position.y - path.poses[index_closest].pose.position.y;
 
         //Same here as description below
-        double angle = atan2(path.poses[index].pose.position.y * resolution - pose.y,
-                             path.poses[index].pose.position.x * resolution - pose.x);
+        double angle = atan2((path.poses[index].pose.position.y * resolution - center_y) - pose.y,
+                             (path.poses[index].pose.position.x * resolution - center_x) - pose.x);
         double angle_v = atan2(y, x);
 
         double rotate;
@@ -125,8 +133,8 @@ public:
         //TODO Check if it makes sense by taking path position * resolution - center_
         //At least know when using the pose from /arduino/odometry since (0,0) for robot is at (5.0, 5.0) in map.
         //Will be different if subscribing to localization if that pose is with origin (0,0) in map.
-        double dist = sqrt(pow(path.poses[index_closest].pose.position.x * resolution - pose.x,2)
-                           + pow(path.poses[index_closest].pose.position.y * resolution - pose.y,2));
+        double dist = sqrt(pow((path.poses[index_closest].pose.position.x * resolution - center_x) - pose.x,2)
+                           + pow((path.poses[index_closest].pose.position.y * resolution - center_y) - pose.y,2));
         if (dist > 0.05) {
            rotate = pose.theta + M_PI_2 - angle;
         } else
@@ -137,7 +145,7 @@ public:
             rotate += 2*M_PI;
         }
 
-        ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x, path.poses[index].pose.position.y);
+        ROS_INFO("Carrot x: %f y: %f", path.poses[index].pose.position.x * resolution - center_x, path.poses[index].pose.position.y*resolution - center_y);
         ROS_INFO("Angle to path: %f \n Angle to rotate: %f \n Theta: %f", angle, rotate, pose.theta);
 
         if (rotate >=M_PI_2*0.97 || rotate <= -M_PI_2*0.97) {
@@ -167,14 +175,14 @@ public:
         int index = -1;
         double dist = 10000;
         for (int i = 0; i < path.poses.size(); i++) {
-            double distance = sqrt(pow(pose.x-path.poses[i].pose.position.x, 2) + pow(pose.y-path.poses[i].pose.position.y, 2));
+            double distance = sqrt(pow(pose.x-(path.poses[i].pose.position.x*resolution - center_x), 2) + pow(pose.y-(path.poses[i].pose.position.y*resolution - center_y), 2));
             if (distance < dist) {
                 index = i;
                 dist = distance;
             }
         }
-
-        if(index > 0) return index;
+        //ROS_INFO("Index closeset %d, x: %f y: %f", index, path.poses[index].pose.position.x*resolution - center_x, path.poses[index].pose.position.y*resolution - center_y);
+        if(index >= 0) return index;
         else return -1;
 
     }
@@ -183,13 +191,13 @@ public:
 
         int index = -1;
         for (int i = 0; i < path.poses.size(); i++) {
-            double distance = sqrt(pow(pose.x-path.poses[i].pose.position.x, 2) + pow(pose.y-path.poses[i].pose.position.y, 2));
+            double distance = sqrt(pow(pose.x-(path.poses[i].pose.position.x*resolution - center_x), 2) + pow(pose.y-(path.poses[i].pose.position.y*resolution - center_y), 2));
             if (distance <= look_ahead) {
                 index = i;
             }
         }
-                ROS_INFO("Index %d, x: %f y: %f", index, path.poses[index].pose.position.x, path.poses[index].pose.position.y);
-        if(sqrt(pow(pose.x-path.poses[path.poses.size()-1].pose.position.x, 2) + pow(pose.y-path.poses[path.poses.size()-1].pose.position.y, 2)) <= 0.05)
+        //ROS_INFO("Index carrot %d, x: %f y: %f", index, path.poses[index].pose.position.x*resolution - center_x, path.poses[index].pose.position.y*resolution - center_y);
+        if(sqrt(pow(pose.x-(path.poses[path.poses.size()-1].pose.position.x*resolution - center_x), 2) + pow(pose.y-(path.poses[path.poses.size()-1].pose.position.y*resolution - center_y), 2)) <= 0.05)
                 goal_reached = true;
 
 	return index;
@@ -250,7 +258,7 @@ public:
 
             //costMap_publisher.publish(temp);
             planPathGoal(cost_map, start, goal, path);
-            //ROS_INFO("Length of path %lu", path.poses.size());
+            ROS_INFO("Length of path %lu", path.poses.size());
             visualizePath();
 
             //Follows path until it reaches goal point
