@@ -23,6 +23,26 @@ struct cell {
     }
 };
 
+
+//Just for debuging
+void printMap(std::vector<std::vector<int> >& map) {
+    int rows = map.size();
+    int cols = map[0].size();
+    for(int y = 0; y < rows; ++y) {
+        for(int x = 0; x < cols; ++x) {
+            if(map[y][x] == 1) {
+                printf("####");
+            } else {
+                printf("%4d", map[y][x]);
+            }
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+
+//Unexplored has to be a negative value
 enum {WALL = 100, UNEXPLORED = -1, UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3};
 cell up(-1, 0);
 cell right(0, 1);
@@ -36,33 +56,46 @@ bool withinBounds(int rows, int cols, const cell& c) {
     return c.x >= 0 && c.x < cols && c.y >= 0 && c.y < rows;
 }
 
-//Flood the map, starting from goal
-void flood(std::vector<std::vector<int> >& map, int rows, int cols, const cell& goal) {
-    map[goal.y][goal.x] = 2;
+//Flood the map markin cost for each cell, starting from goal
+bool floodCost(std::vector<std::vector<int> >& floodMap,
+               const nav_msgs::OccupancyGrid& map,
+               const cell& goal,
+               bool stopAtUnexplored = false,
+               geometry_msgs::Pose* pose = NULL)
+{
+    int rows = map.info.height;
+    int cols = map.info.width;
+    floodMap[goal.y][goal.x] = 2;
     std::queue<cell> floodQue;
     floodQue.push(goal);
 
     while(!floodQue.empty()) {
         cell& cc = floodQue.front();
+        if(stopAtUnexplored && map.data[cc.y*cols + cc.x] == UNEXPLORED) {
+            pose->position.x = cc.x;
+            pose->position.y = cc.y;
+            return true;
+        }
 
-        if(cc.y > 0 && map[cc.y-1][cc.x] == 0) {
-            map[cc.y-1][cc.x] = cc.cost + 1;
+        if(cc.y > 0 && floodMap[cc.y-1][cc.x] <= 0) {
+            floodMap[cc.y-1][cc.x] = cc.cost + 1;
             floodQue.push(cell(cc.y-1, cc.x, cc.cost+1));
         }
-        if(cc.y < rows-1 && map[cc.y+1][cc.x] == 0) {
-            map[cc.y+1][cc.x] = cc.cost + 1;
+        if(cc.y < rows-1 && floodMap[cc.y+1][cc.x] <= 0) {
+            floodMap[cc.y+1][cc.x] = cc.cost + 1;
             floodQue.push(cell(cc.y+1, cc.x, cc.cost+1));
         }
-        if(cc.x > 0 && map[cc.y][cc.x-1] == 0) {
-            map[cc.y][cc.x-1] = cc.cost + 1;
+        if(cc.x > 0 && floodMap[cc.y][cc.x-1] <= 0) {
+            floodMap[cc.y][cc.x-1] = cc.cost + 1;
             floodQue.push(cell(cc.y, cc.x-1, cc.cost+1));
         }
-        if(cc.x < cols-1 && map[cc.y][cc.x+1] == 0) {
-            map[cc.y][cc.x+1] = cc.cost + 1;
+        if(cc.x < cols-1 && floodMap[cc.y][cc.x+1] <= 0) {
+            floodMap[cc.y][cc.x+1] = cc.cost + 1;
             floodQue.push(cell(cc.y, cc.x+1, cc.cost+1));
         }
         floodQue.pop();
     }
+    return false;
 }
 
 //Finds the next cell relative to the currentCell using an already flooded map.
@@ -104,7 +137,7 @@ void backTrackPath(const std::vector<std::vector<int> >& map, int rows, int cols
 void planPathGoal(const nav_msgs::OccupancyGrid& map,
                   const geometry_msgs::Pose& start,
                   const geometry_msgs::Pose& goal,
-                  nav_msgs::Path& outPath) {//std::vector<geometry_msgs::Pose>& outPath) {
+                  nav_msgs::Path& outPath) {
     int rows = map.info.height;
     int cols = map.info.width;
     ROS_INFO("Rows: %d Columns: %d", rows, cols);
@@ -119,25 +152,53 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
     ROS_INFO("Flooded map");
 
     std::vector<cell> path;
-    flood(floodMap, rows, cols, cell(goal.position.y, goal.position.x));
+    floodCost(floodMap, map, cell(goal.position.y, goal.position.x, 2));
 
     //Test if there is a possible path before backtracking
     if(floodMap[start.position.y][start.position.x] > 0) {
         backTrackPath(floodMap, rows, cols, cell(start.position.y, start.position.x), path);
-        //geometry_msgs::Pose pose;
         geometry_msgs::PoseStamped pose;
 
         //Add the path to the output vector
         for(size_t i = 0; i < path.size(); ++i) {
-            //pose.position.x = path[i].x;
-            //pose.position.y = path[i].y;
             pose.pose.position.x = path[i].x;
             pose.pose.position.y = path[i].y;
             outPath.poses.push_back(pose);
-            //outPath.push_back(pose);
         }
     }
     ROS_INFO("Done with path planning, length is %lu", outPath.poses.size());
+}
+
+void planPathUnexplored(const nav_msgs::OccupancyGrid& map,
+                  const geometry_msgs::Pose& start,
+                  nav_msgs::Path& outPath) {
+    int rows = map.info.height;
+    int cols = map.info.width;
+    ROS_INFO("Rows: %d Columns: %d", rows, cols);
+    std::vector<std::vector<int> > floodMap(rows, std::vector<int>(cols));
+
+    for(int y = 0; y < rows; ++y) {
+        int index = y*cols;
+        for(int x = 0; x < cols; ++x) {
+            floodMap[y][x] = map.data[index + x] == WALL;
+        }
+    }
+
+    //Really confusing code, since I reverse start and goal.
+    geometry_msgs::Pose foundGoal;
+    cell goal(start.position.y, start.position.x, 2);
+    bool pathFound = floodCost(floodMap, map, goal, true, &foundGoal);
+    std::vector<cell> path;
+    if(pathFound) {
+        backTrackPath(floodMap, rows, cols, cell(foundGoal.position.y, foundGoal.position.x), path);
+        geometry_msgs::PoseStamped pose;
+
+        for(int i = path.size()-1; i >= 0; --i) {
+            pose.pose.position.x = path[i].x;
+            pose.pose.position.y = path[i].y;
+            outPath.poses.push_back(pose);
+        }
+    }
 }
 
 #endif // PATH_PLANNING_HPP
