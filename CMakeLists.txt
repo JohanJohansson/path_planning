@@ -12,9 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 )
 
-include_directories(
-  ${catkin_INCLUDE_DIRS}
-)
+include_directories(include ${catkin_INCLUDE_DIRS})
 
 add_executable(path_planning_main src/path_planning_main.cpp)
 add_dependencies(path_planning_main ${catkin_EXPORTED_TARGETS})

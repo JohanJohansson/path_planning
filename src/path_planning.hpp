@@ -104,9 +104,10 @@ void backTrackPath(const std::vector<std::vector<int> >& map, int rows, int cols
 void planPathGoal(const nav_msgs::OccupancyGrid& map,
                   const geometry_msgs::Pose& start,
                   const geometry_msgs::Pose& goal,
-                  std::vector<geometry_msgs::Pose> outPath) {
+                  nav_msgs::Path& outPath) {//std::vector<geometry_msgs::Pose>& outPath) {
     int rows = map.info.height;
     int cols = map.info.width;
+    ROS_INFO("Rows: %d Columns: %d", rows, cols);
     std::vector<std::vector<int> > floodMap(rows, std::vector<int>(cols));
 
     for(int y = 0; y < rows; ++y) {
@@ -115,6 +116,7 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
             floodMap[y][x] = map.data[index + x] == WALL || map.data[index + x] == UNEXPLORED;
         }
     }
+    ROS_INFO("Flooded map");
 
     std::vector<cell> path;
     flood(floodMap, rows, cols, cell(goal.position.y, goal.position.x));
@@ -122,15 +124,20 @@ void planPathGoal(const nav_msgs::OccupancyGrid& map,
     //Test if there is a possible path before backtracking
     if(floodMap[start.position.y][start.position.x] > 0) {
         backTrackPath(floodMap, rows, cols, cell(start.position.y, start.position.x), path);
-        geometry_msgs::Pose pose;
+        //geometry_msgs::Pose pose;
+        geometry_msgs::PoseStamped pose;
 
         //Add the path to the output vector
         for(size_t i = 0; i < path.size(); ++i) {
-            pose.position.x = path[i].x;
-            pose.position.y = path[i].y;
-            outPath.push_back(pose);
+            //pose.position.x = path[i].x;
+            //pose.position.y = path[i].y;
+            pose.pose.position.x = path[i].x;
+            pose.pose.position.y = path[i].y;
+            outPath.poses.push_back(pose);
+            //outPath.push_back(pose);
         }
     }
+    ROS_INFO("Done with path planning, length is %lu", outPath.poses.size());
 }
 
 #endif // PATH_PLANNING_HPP
