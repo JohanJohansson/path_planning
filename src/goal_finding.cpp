@@ -154,18 +154,19 @@ public:
                 obj_cell_y = pos_cell_y;
             }
             new_obj_pose.object_id = Obj.object_id;
-            ROS_INFO("Object: %s", new_obj_pose.object_id.c_str());
-            ROS_INFO("closest cell_x: %d", obj_cell_x );
-            ROS_INFO("closest cell_y: %d", obj_cell_y );
+
             //Visualiing where closest cell is
-            testmap.data[obj_cell_x + width_map*obj_cell_y] = 100;
-            findGoal = 1;
+            testmap.data[obj_cell_x + width_map*obj_cell_y] = 110;
             new_obj_pose.header.frame_id = "map";
-            new_obj_pose.position.x = obj_cell_x*resolution;
-            new_obj_pose.position.y = obj_cell_y*resolution;
+            new_obj_pose.position.x = obj_cell_x;
+            new_obj_pose.position.y = obj_cell_y;
+            ROS_INFO("Object: %s", new_obj_pose.object_id.c_str());
+            ROS_INFO("closest cell_x: %f", new_obj_pose.position.x );
+            ROS_INFO("closest cell_y: %f", new_obj_pose.position.y );
             new_obj_publisher.publish(new_obj_pose);
 
         }
+        findGoal = 1;
         obj_test_publisher.publish(testmap);
 
     }
