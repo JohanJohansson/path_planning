@@ -14,7 +14,6 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "path_planing");
     ros::NodeHandle nh;
 
-#ifdef DCB
     nav_msgs::OccupancyGrid map;
     map.info.height = 10;
     map.info.width = 10;
@@ -28,7 +27,7 @@ int main(int argc, char **argv) {
     map.data[56] = 100;
     map.data[57] = 100;
     map.data[58] = 100;
-    map.data[59] = 100;
+    map.data[59] = 0;
     map.data[39] = 100;
     map.data[38] = 100;
     map.data[37] = 100;
@@ -36,18 +35,19 @@ int main(int argc, char **argv) {
     map.data[35] = 0;
     map.data[34] = 100;
     map.data[33] = 100;
+    map.data[70] = -1;
+
     geometry_msgs::Pose start, goal;
     start.position.x = 0;
     start.position.y = 0;
     goal.position.x = 9;
     goal.position.y = 9;
 
-    std::vector<geometry_msgs::Pose> path;
+    nav_msgs::Path path;
 
-    planPathGoal(map, start, goal, path);
+    planPathUnexplored(map, start, path);
 
-
-#endif
+    std::cout << "Path size: " << path.poses.size() << std::endl;
 
     ros::spin();
     return 0;
