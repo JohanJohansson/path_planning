@@ -2,7 +2,7 @@
 #include <nav_msgs/Path.h>
 #include <ras_arduino_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
-#include <robot_msgs/useMazeFollower.h>
+#include <robot_msgs/usePathFollower.h>
 #include "path_planning.hpp"
 #include <visualization_msgs/Marker.h>
 
@@ -13,6 +13,8 @@
 #include <robot_msgs/FollowWall.h>
 #include <math.h>
 #include <iostream>
+#include <robot_msgs/pathSucceeded.h>
+
 
 enum {LEFT_TURN = 1, RIGHT_TURN = 2};
 
@@ -23,6 +25,7 @@ enum {LEFT_TURN = 1, RIGHT_TURN = 2};
 class Navigation {
 
 public:
+    bool callFindandFollow;
     ros::NodeHandle n;
     ros::Subscriber path_sub;
     ros::Subscriber pose_sub;
@@ -34,6 +37,7 @@ public:
     ros::Publisher marker_pub;
     ros::Publisher costMap_publisher;
     ros::Subscriber distance_sub;
+    ros::ServiceClient succeed_path_client;
 
     Navigation() {
         n = ros::NodeHandle();
@@ -43,11 +47,13 @@ public:
         twist_pub = n.advertise<geometry_msgs::Twist>("/motor_controller/twist", 1);
         turn_client = n.serviceClient<robot_msgs::MakeTurn>("/make_turn");
         cost_map_sub = n.subscribe("/costmap", 1, &Navigation::costMapCallback, this);
-        path_server = n.advertiseService("/use_path_follower", &Navigation::findAndFollowPath, this);
+        path_server = n.advertiseService("/use_path_follower", &Navigation::findAndFollowPathCallback, this);
         marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 10);
         costMap_publisher = n.advertise<nav_msgs::OccupancyGrid>("/test_costmap", 1);
         distance_sub = n.subscribe("/ir_sensor_cm", 1, &Navigation::IrCallback, this);
-
+        succeed_path_client = n.serviceClient<robot_msgs::pathSucceeded>("/simple");
+	
+	callFindandFollow=false;
         look_ahead = 0.2;
         goal_reached = false;
         resolution = 0.02;
@@ -178,11 +184,8 @@ public:
 	    
             double alpha = 4;
             twist.linear.x = 0.1;
-            /*double temp = wallTooClose();
-            if (temp != 0) {
-                ROS_INFO("Wall too close %f", temp);
-                twist.angular.z = temp;
-            } else */if (std::abs(rotate) < 0.16*2) {
+	    
+            if (std::abs(rotate) < 0.16*2) {
                 ROS_INFO("Corrects heading");
             	twist.angular.z = alpha*(-rotate);
             }
@@ -267,61 +270,69 @@ public:
         twist.linear.x = 0.0;
         twist.angular.z = 0.0;
         twist_pub.publish(twist);
-    }
+        robot_msgs::pathSucceeded succeed_srv;
+        succeed_srv.request.succeeded = true;
 
-    void findDesiredLocation(geometry_msgs::Pose goal) {//Goal x and y need to be in map indexes where (250, 250) is the middle
-        ROS_INFO("Wants to plan a path.");
-        geometry_msgs::Pose start;
-
-        start.position.x = floor((center_x + pose.x)/resolution);
-        start.position.y = floor((center_y + pose.y)/resolution);
-        ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
-
-        //costMap_publisher.publish(temp);
-        planPathGoal(cost_map, start, goal, path);
-        ROS_INFO("Length of path %lu", path.poses.size());
-        visualizePath();
-
-        //Follows path until it reaches goal point
-        ros::Rate loop_rate(RATE);
-        while (!reachedGoal()) {
-            ros::spinOnce();
-            followPath();
-            loop_rate.sleep();
+	ROS_INFO("Path-Navigation try to Stop");
+        if(succeed_path_client.call(succeed_srv)){
+            ROS_INFO("Succesfully called succeed_srv to masternode");
+        }
+        else{
+            ROS_ERROR("Failed to call Succeeded to Master Node");
         }
 
-        stop();
     }
-
     //Finds the path between start and goal if possible and then drives there
-    bool findAndFollowPath(robot_msgs::useMazeFollower::Request &req, robot_msgs::useMazeFollower::Response &res) {
+    bool findAndFollowPathCallback(robot_msgs::usePathFollower::Request &req, robot_msgs::usePathFollower::Response &res) {
+	if(req.go){
+	    currentRequest=req;
+	    callFindandFollow=true;
+            STOP=false;
+	}
+	else{
+	    STOP=true;
+	}
+	return true;
 
-        if (req.go == true) {
+}
+    void findAndFollowPath(){
+	    callFindandFollow=false;
             ROS_INFO("Wants to plan a path.");
             geometry_msgs::Pose goal, start;
-            goal.position.x = 250; //Goal needs to be in cell indexes
-            goal.position.y = 250; //Goal needs to be in cell indexes
+
             start.position.x = floor((center_x + pose.x)/resolution);
             start.position.y = floor((center_y + pose.y)/resolution);
-            ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
+	    path.poses.clear();
+            if(currentRequest.goal.x<0 && currentRequest.goal.y<0){
+                ROS_INFO("Explore unexplored Area");
+                planPathUnexplored(cost_map,start,path);
+            }
+            else{
+                goal.position.x = currentRequest.goal.x; //Goal needs to be in cell indexes
+                goal.position.y = currentRequest.goal.y; //Goal needs to be in cell indexes
+                ROS_INFO("Start x: %f y: %f \n Goal x: %f y: %f", start.position.x, start.position.y, goal.position.x, goal.position.y);
 
-            //costMap_publisher.publish(temp);
-            planPathGoal(cost_map, start, goal, path);
+                //costMap_publisher.publish(temp);
+                planPathGoal(cost_map, start, goal, path);
+            }
             ROS_INFO("Length of path %lu", path.poses.size());
             visualizePath();
 
             //Follows path until it reaches goal point
             ros::Rate loop_rate(RATE);
-            while (!reachedGoal()) {
-                ros::spinOnce();
+            while (!reachedGoal() && !STOP) {
+
                 followPath();
+                ros::spinOnce();
+
                 loop_rate.sleep();
             }
-
+	    if(STOP) ROS_INFO("Left While-loop,  got an Stop msg");
+	    if(reachedGoal()) ROS_INFO("Left While-loop, reached the Goal ");
             stop();
-        } else ROS_INFO("Don't plan a path");
 
-        return true;
+
+        return;
     }
 
     //Publishes the path to be visualized in Rviz
@@ -343,8 +354,8 @@ public:
         points.pose.position.y = 5;
 
         ROS_INFO("Length of path %lu", path.poses.size());
+        geometry_msgs::Point p;
         for (int i = 0; i < path.poses.size(); i++) {
-            geometry_msgs::Point p;
             p.x = path.poses[i].pose.position.x * resolution - center_x;
             p.y = path.poses[i].pose.position.y * resolution - center_y;
             p.z = 0;
@@ -353,6 +364,15 @@ public:
         }
         marker_pub.publish(points);
 
+        points.points.clear();
+        points.id = 1;
+        points.type = visualization_msgs::Marker::SPHERE;
+        points.scale.x = 0.04;
+        points.scale.y = 0.04;
+        points.color.b = 1.0;
+        points.color.a = 1.0;
+        points.points.push_back(p);
+        marker_pub.publish(points);
     }
 
 private:
@@ -366,7 +386,8 @@ private:
     double center_x;
     double center_y;
     int front_left, front_right, back_left, back_right, forward_left, forward_right, state;
-
+    bool STOP;
+    robot_msgs::usePathFollower::Request currentRequest;
 };
 
 int main(int argc, char **argv) {
@@ -376,7 +397,7 @@ int main(int argc, char **argv) {
     Navigation nav;
 
     //ros::Duration(1.0).sleep();
-    //ros::Rate loop_rate(RATE);
+    ros::Rate loop_rate(RATE);
     /*while (!nav.reachedGoal()) {
         ros::spinOnce();
         nav.followPath();
@@ -385,6 +406,13 @@ int main(int argc, char **argv) {
 
     nav.stop();
 */
-    ros::spin();
+    while(ros::ok()){
+	ros::spinOnce();
+        if(nav.callFindandFollow){
+	    nav.findAndFollowPath();
+	}
+	loop_rate.sleep();
+    }
+//    ros::spin();
     return 0;
 }

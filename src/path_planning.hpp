@@ -193,7 +193,8 @@ void planPathUnexplored(const nav_msgs::OccupancyGrid& map,
         backTrackPath(floodMap, rows, cols, cell(foundGoal.position.y, foundGoal.position.x), path);
         geometry_msgs::PoseStamped pose;
 
-        for(int i = path.size()-1; i >= 0; --i) {
+//        for(int i = path.size()-1; i >= 0; --i) {
+        for(int i = 0; i < path.size(); ++i) {
             pose.pose.position.x = path[i].x;
             pose.pose.position.y = path[i].y;
             outPath.poses.push_back(pose);
